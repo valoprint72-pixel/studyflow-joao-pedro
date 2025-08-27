@@ -50,6 +50,7 @@ export default function AIFeedback({ onNavigate }: AIFeedbackProps) {
   const [analyzing, setAnalyzing] = useState(false);
   const [userQuestion, setUserQuestion] = useState('');
   const [chatHistory, setChatHistory] = useState<Array<{question: string, answer: string}>>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUserData();
@@ -58,39 +59,104 @@ export default function AIFeedback({ onNavigate }: AIFeedbackProps) {
   const fetchUserData = async () => {
     try {
       setLoading(true);
+      setError(null);
+      
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) return;
+      if (!userData.user) {
+        setError('Usuário não autenticado');
+        setLoading(false);
+        return;
+      }
 
-      // Buscar todos os dados do usuário
+      // Buscar todos os dados do usuário com tratamento de erro individual
+      const fetchData = async (table: string, userId: string) => {
+        try {
+          const { data, error } = await supabase
+            .from(table)
+            .select('*')
+            .eq('user_id', userId);
+          
+          if (error) {
+            console.error(`Error fetching ${table}:`, error);
+            return [];
+          }
+          
+          return data || [];
+        } catch (err) {
+          console.error(`Error fetching ${table}:`, err);
+          return [];
+        }
+      };
+
       const [habitsData, goalsData, studyData, financialData, achievementsData] = await Promise.all([
-        supabase.from('habits').select('*').eq('user_id', userData.user.id),
-        supabase.from('goals').select('*').eq('user_id', userData.user.id),
-        supabase.from('pomodoro_sessions').select('*').eq('user_id', userData.user.id),
-        supabase.from('transactions').select('*').eq('user_id', userData.user.id),
-        supabase.from('user_achievements').select('*').eq('user_id', userData.user.id)
+        fetchData('habits', userData.user.id),
+        fetchData('goals', userData.user.id),
+        fetchData('pomodoro_sessions', userData.user.id),
+        fetchData('transactions', userData.user.id),
+        fetchData('user_achievements', userData.user.id)
       ]);
 
       const data: UserData = {
-        habits: habitsData.data || [],
-        goals: goalsData.data || [],
-        studySessions: studyData.data || [],
-        financialData: financialData.data || [],
+        habits: habitsData,
+        goals: goalsData,
+        studySessions: studyData,
+        financialData: financialData,
         moodData: [], // Será implementado depois
-        achievements: achievementsData.data || []
+        achievements: achievementsData
       };
 
       setUserData(data);
       await generateInsights(data);
     } catch (error) {
       console.error('Error fetching user data:', error);
+      setError('Erro ao carregar dados do usuário');
+      // Gerar insights padrão mesmo com erro
+      await generateDefaultInsights();
     } finally {
       setLoading(false);
     }
   };
 
+  const generateDefaultInsights = async () => {
+    const defaultInsights: FeedbackInsight[] = [
+      {
+        type: 'motivation',
+        title: 'Bem-vindo ao seu Coach Digital!',
+        message: 'Estou aqui para te ajudar a alcançar seus objetivos. Comece criando seus primeiros hábitos e metas.',
+        icon: 'brain',
+        action: 'Criar primeiro hábito',
+        priority: 'high'
+      },
+      {
+        type: 'suggestion',
+        title: 'Configure suas Metas',
+        message: 'Defina metas claras e mensuráveis para ter direção em sua jornada de autodesenvolvimento.',
+        icon: 'target',
+        action: 'Criar primeira meta',
+        priority: 'high'
+      },
+      {
+        type: 'positive',
+        title: 'Pronto para Começar!',
+        message: 'Você tem todas as ferramentas necessárias para transformar sua vida. Vamos começar?',
+        icon: 'star',
+        action: 'Iniciar Pomodoro',
+        priority: 'medium'
+      }
+    ];
+    
+    setInsights(defaultInsights);
+  };
+
   const generateInsights = async (data: UserData) => {
     try {
       setAnalyzing(true);
+      
+      // Se não há dados suficientes, usar insights padrão
+      if (data.habits.length === 0 && data.goals.length === 0) {
+        await generateDefaultInsights();
+        return;
+      }
       
       // Gerar insights usando IA
       const aiInsights = await OpenAIService.analyzeHabits(data.habits, data.goals, data.studySessions);
@@ -100,76 +166,23 @@ export default function AIFeedback({ onNavigate }: AIFeedbackProps) {
         type: insight.type,
         title: insight.title,
         message: insight.message,
-        icon: insight.icon || '💡',
+        icon: insight.icon,
         action: insight.action,
-        priority: insight.priority || 'medium'
+        priority: insight.priority
       }));
-
+      
       setInsights(insights);
     } catch (error) {
       console.error('Error generating insights:', error);
-      // Fallback para insights básicos se a IA falhar
-      const fallbackInsights = await generateFallbackInsights(data);
-      setInsights(fallbackInsights);
+      // Se der erro na IA, usar insights padrão
+      await generateDefaultInsights();
     } finally {
       setAnalyzing(false);
     }
   };
 
-  const generateFallbackInsights = async (data: UserData): Promise<FeedbackInsight[]> => {
-    const insights: FeedbackInsight[] = [];
-    
-    if (data.habits.length === 0) {
-      insights.push({
-        type: 'suggestion',
-        title: 'Comece com Hábitos',
-        message: 'Você ainda não tem hábitos cadastrados. Que tal começar com algo simples como "Beber água" ou "Ler 10 minutos"?',
-        icon: '🌱',
-        action: 'Criar primeiro hábito',
-        priority: 'high'
-      });
-    }
-
-    if (data.goals.length === 0) {
-      insights.push({
-        type: 'suggestion',
-        title: 'Defina Metas',
-        message: 'Metas dão direção ao seu progresso. Que tal definir uma meta para esta semana?',
-        icon: '🎯',
-        action: 'Criar primeira meta',
-        priority: 'high'
-      });
-    }
-
-    if (data.studySessions.length === 0) {
-      insights.push({
-        type: 'suggestion',
-        title: 'Inicie uma Sessão de Estudo',
-        message: 'Use o Timer Pomodoro para focar nos estudos. 25 minutos de foco podem fazer a diferença!',
-        icon: '📚',
-        action: 'Iniciar Pomodoro',
-        priority: 'medium'
-      });
-    }
-
-    if (data.financialData.length === 0) {
-      insights.push({
-        type: 'suggestion',
-        title: 'Controle Financeiro',
-        message: 'Comece a registrar suas despesas e receitas para ter melhor controle financeiro.',
-        icon: '💰',
-        action: 'Registrar transação',
-        priority: 'medium'
-      });
-    }
-
-    return insights;
-  };
-
   const handleInsightAction = (action: string) => {
     if (!onNavigate) return;
-
-    // Mapear ações para páginas
     const actionMap: { [key: string]: string } = {
       'Criar primeiro hábito': 'self-knowledge',
       'Criar primeira meta': 'self-knowledge',
@@ -180,92 +193,99 @@ export default function AIFeedback({ onNavigate }: AIFeedbackProps) {
       'Iniciar estudo': 'pomodoro',
       'Revisar finanças': 'finances'
     };
-
     const targetPage = actionMap[action];
     if (targetPage) {
       onNavigate(targetPage);
     }
   };
 
+  const askQuestion = async () => {
+    if (!userQuestion.trim()) return;
 
-
-  const askAIQuestion = async () => {
-    if (!userQuestion.trim() || !userData) return;
-
-    const currentQuestion = userQuestion;
-    setUserQuestion(''); // Limpar imediatamente para melhor UX
+    const question = userQuestion;
+    setUserQuestion('');
+    
+    // Adicionar pergunta ao histórico imediatamente
+    const newChatEntry = { question, answer: '' };
+    setChatHistory(prev => [...prev, newChatEntry]);
 
     try {
-      setAnalyzing(true);
-      
-      // Adicionar pergunta ao histórico imediatamente
-      setChatHistory(prev => [...prev, {
-        question: currentQuestion,
-        answer: 'Analisando...'
-      }]);
-
+      // Gerar resposta da IA
       const context = `
         Dados do usuário:
-        - Hábitos: ${userData.habits.length} ativos
-        - Metas: ${userData.goals.length} definidas
-        - Sessões de estudo: ${userData.studySessions.length}
-        - Transações financeiras: ${userData.financialData.length}
-        - Conquistas: ${userData.achievements.length}
+        - Hábitos: ${userData?.habits.length || 0}
+        - Metas: ${userData?.goals.length || 0}
+        - Sessões de estudo: ${userData?.studySessions.length || 0}
+        - Transações financeiras: ${userData?.financialData.length || 0}
         
-        Histórico da conversa:
-        ${chatHistory.map(chat => `P: ${chat.question}\nR: ${chat.answer}`).join('\n')}
+        Histórico do chat:
+        ${chatHistory.map(entry => `P: ${entry.question}\nR: ${entry.answer}`).join('\n')}
         
-        Nova pergunta: ${currentQuestion}
+        Pergunta atual: ${question}
       `;
 
-      const feedback = await OpenAIService.getPersonalizedAdvice(context, userData);
-      
+      const response = await OpenAIService.makeRequest(`
+        Você é um coach digital especializado em produtividade e autodesenvolvimento.
+        Responda à pergunta do usuário de forma motivacional e prática.
+        
+        Contexto: ${context}
+        
+        Responda em português de forma clara e objetiva, máximo 2 parágrafos.
+      `);
+
       // Atualizar a resposta no histórico
-      setChatHistory(prev => {
-        const newHistory = [...prev];
-        newHistory[newHistory.length - 1].answer = feedback.message;
-        return newHistory;
-      });
-      
-      setCurrentFeedback(feedback);
+      setChatHistory(prev => 
+        prev.map((entry, index) => 
+          index === prev.length - 1 ? { ...entry, answer: response } : entry
+        )
+      );
     } catch (error) {
-      console.error('Error asking AI question:', error);
-      
-      // Atualizar com erro no histórico
-      setChatHistory(prev => {
-        const newHistory = [...prev];
-        newHistory[newHistory.length - 1].answer = 'Desculpe, houve um erro ao processar sua pergunta. Tente novamente.';
-        return newHistory;
-      });
-    } finally {
-      setAnalyzing(false);
+      console.error('Error asking question:', error);
+      // Atualizar com resposta de erro
+      setChatHistory(prev => 
+        prev.map((entry, index) => 
+          index === prev.length - 1 ? { ...entry, answer: 'Desculpe, não consegui processar sua pergunta no momento. Tente novamente.' } : entry
+        )
+      );
     }
   };
 
-  const getInsightColor = (type: string) => {
-    switch (type) {
-      case 'positive': return 'from-green-500 to-emerald-500';
-      case 'suggestion': return 'from-blue-500 to-indigo-500';
-      case 'warning': return 'from-orange-500 to-red-500';
-      case 'motivation': return 'from-purple-500 to-pink-500';
-      default: return 'from-gray-500 to-gray-600';
-    }
-  };
+  // Garantir que o loading pare após um tempo máximo
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (loading) {
+        setLoading(false);
+        if (insights.length === 0) {
+          generateDefaultInsights();
+        }
+      }
+    }, 5000); // 5 segundos máximo
 
-  const getInsightIcon = (type: string) => {
-    switch (type) {
-      case 'positive': return <TrendingUp className="h-5 w-5" />;
-      case 'suggestion': return <Lightbulb className="h-5 w-5" />;
-      case 'warning': return <Target className="h-5 w-5" />;
-      case 'motivation': return <Heart className="h-5 w-5" />;
-      default: return <MessageSquare className="h-5 w-5" />;
-    }
-  };
+    return () => clearTimeout(timer);
+  }, [loading, insights.length]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center p-8">
+        <div className="text-red-500 mb-4">
+          <Brain className="h-12 w-12 mx-auto mb-2" />
+          <p className="text-lg font-semibold">Erro ao carregar</p>
+          <p className="text-sm">{error}</p>
+        </div>
+        <button 
+          onClick={fetchUserData}
+          className="btn-primary"
+        >
+          Tentar Novamente
+        </button>
       </div>
     );
   }
@@ -277,178 +297,143 @@ export default function AIFeedback({ onNavigate }: AIFeedbackProps) {
         <div className="flex items-center justify-center mb-4">
           <Brain className="h-8 w-8 text-blue-600 mr-3" />
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-            Feedback com IA
+            Coach Digital com IA
           </h1>
         </div>
-        <p className="text-gray-600">
-          Seu coach digital analisa seus dados e fornece insights personalizados
+        <p className="text-gray-600 mb-4">
+          Análise personalizada e feedback inteligente para seus objetivos
         </p>
-      </div>
-
-
-
-      {/* Insights Automáticos */}
-      <div className="glass-card p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center">
-            <BarChart3 className="h-6 w-6 text-blue-600 mr-2" />
-            <h2 className="text-xl font-bold">Insights Automáticos</h2>
+        
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-blue-600">{userData?.habits.length || 0}</div>
+            <div className="text-sm text-gray-600">Hábitos</div>
           </div>
-          <button
-            onClick={() => userData && generateInsights(userData)}
-            disabled={analyzing}
-            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
-          >
-            <RefreshCw className={`h-4 w-4 ${analyzing ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600">{userData?.goals.length || 0}</div>
+            <div className="text-sm text-gray-600">Metas</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-purple-600">{userData?.studySessions.length || 0}</div>
+            <div className="text-sm text-gray-600">Sessões</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-orange-600">{userData?.achievements.length || 0}</div>
+            <div className="text-sm text-gray-600">Conquistas</div>
+          </div>
         </div>
 
-        {analyzing ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-            <p className="text-gray-600">Analisando seus dados...</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {insights.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>Nenhum insight disponível no momento.</p>
-                <p className="text-sm">Continue usando o app para receber feedback personalizado!</p>
+        {/* Refresh Button */}
+        <button
+          onClick={fetchUserData}
+          disabled={analyzing}
+          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${analyzing ? 'animate-spin' : ''}`} />
+          {analyzing ? 'Analisando...' : 'Atualizar Análise'}
+        </button>
+      </div>
+
+      {/* Insights Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {insights.map((insight, index) => (
+          <div key={index} className="glass-card p-6 hover:scale-105 transition-transform">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center">
+                {insight.icon === 'brain' && <Brain className="h-6 w-6 text-blue-600 mr-2" />}
+                {insight.icon === 'target' && <Target className="h-6 w-6 text-green-600 mr-2" />}
+                {insight.icon === 'star' && <Star className="h-6 w-6 text-yellow-600 mr-2" />}
+                {insight.icon === 'lightbulb' && <Lightbulb className="h-6 w-6 text-purple-600 mr-2" />}
+                {insight.icon === 'trending' && <TrendingUp className="h-6 w-6 text-orange-600 mr-2" />}
+                {insight.icon === 'award' && <Award className="h-6 w-6 text-red-600 mr-2" />}
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  insight.type === 'positive' ? 'bg-green-100 text-green-600' :
+                  insight.type === 'suggestion' ? 'bg-blue-100 text-blue-600' :
+                  insight.type === 'warning' ? 'bg-yellow-100 text-yellow-600' :
+                  'bg-pink-100 text-pink-600'
+                }`}>
+                  {insight.type === 'positive' ? 'Positivo' :
+                   insight.type === 'suggestion' ? 'Sugestão' :
+                   insight.type === 'warning' ? 'Atenção' : 'Motivação'}
+                </span>
               </div>
-            ) : (
-              insights.map((insight, index) => (
-                <div
-                  key={index}
-                  className={`p-4 rounded-xl bg-gradient-to-r ${getInsightColor(insight.type)} text-white`}
-                >
-                  <div className="flex items-start space-x-3">
-                    <div className="text-2xl">{insight.icon}</div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold mb-1">{insight.title}</h3>
-                      <p className="text-sm opacity-90">{insight.message}</p>
-                      {insight.action && (
-                        <button 
-                          onClick={() => handleInsightAction(insight.action!)}
-                          className="mt-2 px-3 py-1 bg-white/20 rounded-lg text-xs font-medium hover:bg-white/30 transition-colors"
-                        >
-                          {insight.action}
-                        </button>
-                      )}
-                    </div>
-                    <div className={`px-2 py-1 rounded-full text-xs font-bold ${
-                      insight.priority === 'high' ? 'bg-red-500' :
-                      insight.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
-                    }`}>
-                      {insight.priority === 'high' ? 'ALTA' : 
-                       insight.priority === 'medium' ? 'MÉDIA' : 'BAIXA'}
-                    </div>
-                  </div>
-                </div>
-              ))
+              <div className={`w-2 h-2 rounded-full ${
+                insight.priority === 'high' ? 'bg-red-500' :
+                insight.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+              }`} />
+            </div>
+
+            <h3 className="text-lg font-semibold mb-2">{insight.title}</h3>
+            <p className="text-gray-600 mb-4">{insight.message}</p>
+            
+            {insight.action && (
+              <button 
+                onClick={() => handleInsightAction(insight.action!)}
+                className="mt-2 px-3 py-1 bg-white/20 rounded-lg text-xs font-medium hover:bg-white/30 transition-colors"
+              >
+                {insight.action}
+              </button>
             )}
           </div>
-        )}
+        ))}
       </div>
 
-      {/* Chat Contínuo */}
+      {/* Chat Section */}
       <div className="glass-card p-6">
-        <h3 className="text-lg font-semibold mb-4 flex items-center">
-          <MessageSquare className="h-5 w-5 mr-2" />
-          Conversa com seu Coach IA
-        </h3>
+        <h2 className="text-xl font-bold mb-4 flex items-center">
+          <MessageSquare className="h-6 w-6 mr-2 text-blue-600" />
+          Chat com IA
+        </h2>
         
-        <div className="space-y-4 max-h-96 overflow-y-auto mb-4 p-4 bg-gray-50 rounded-lg">
-          {chatHistory.length === 0 ? (
-            <div className="text-center text-gray-500 py-8">
-              <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>Faça sua primeira pergunta ao seu coach IA!</p>
-              <p className="text-sm mt-1">Ex: "Como posso melhorar meus hábitos?"</p>
-            </div>
-          ) : (
-            chatHistory.map((chat, index) => (
-              <div key={index} className="space-y-3">
-                {/* Pergunta do usuário */}
-                <div className="flex justify-end">
-                  <div className="bg-blue-600 text-white p-3 rounded-lg max-w-xs lg:max-w-md">
-                    <p className="text-sm">{chat.question}</p>
+        {/* Chat History */}
+        <div className="space-y-4 mb-4 max-h-64 overflow-y-auto">
+          {chatHistory.map((entry, index) => (
+            <div key={index} className="space-y-2">
+              {/* User Question */}
+              <div className="flex justify-end">
+                <div className="bg-blue-600 text-white p-3 rounded-lg max-w-xs">
+                  <div className="flex items-center mb-1">
+                    <User className="h-3 w-3 mr-1" />
+                    <span className="text-xs">Você</span>
                   </div>
+                  <p className="text-sm">{entry.question}</p>
                 </div>
-                
-                {/* Resposta da IA */}
+              </div>
+              
+              {/* AI Answer */}
+              {entry.answer && (
                 <div className="flex justify-start">
-                  <div className="bg-white border border-gray-200 p-3 rounded-lg max-w-xs lg:max-w-md">
-                    <div className="flex items-center mb-2">
-                      <Brain className="h-4 w-4 text-blue-600 mr-2" />
-                      <span className="text-xs font-medium text-gray-600">Coach IA</span>
+                  <div className="bg-gray-100 p-3 rounded-lg max-w-xs">
+                    <div className="flex items-center mb-1">
+                      <Brain className="h-3 w-3 mr-1 text-blue-600" />
+                      <span className="text-xs text-gray-600">IA Coach</span>
                     </div>
-                    <p className="text-sm text-gray-800">{chat.answer}</p>
+                    <p className="text-sm text-gray-700">{entry.answer}</p>
                   </div>
                 </div>
-              </div>
-            ))
-          )}
-          
-          {analyzing && (
-            <div className="flex justify-start">
-              <div className="bg-white border border-gray-200 p-3 rounded-lg">
-                <div className="flex items-center">
-                  <RefreshCw className="h-4 w-4 text-blue-600 mr-2 animate-spin" />
-                  <span className="text-sm text-gray-600">Analisando...</span>
-                </div>
-              </div>
+              )}
             </div>
-          )}
+          ))}
         </div>
         
-        {/* Input para nova pergunta */}
+        {/* Input */}
         <div className="flex space-x-2">
           <input
             type="text"
             value={userQuestion}
             onChange={(e) => setUserQuestion(e.target.value)}
-            placeholder="Digite sua pergunta..."
-            className="input-field flex-1"
-            onKeyPress={(e) => e.key === 'Enter' && askAIQuestion()}
+            onKeyPress={(e) => e.key === 'Enter' && askQuestion()}
+            placeholder="Faça uma pergunta ao seu coach digital..."
+            className="flex-1 input-field"
           />
           <button
-            onClick={askAIQuestion}
-            disabled={analyzing || !userQuestion.trim()}
-            className="btn-primary flex items-center px-4"
+            onClick={askQuestion}
+            disabled={!userQuestion.trim()}
+            className="btn-primary px-4 py-2"
           >
-            {analyzing ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
+            <Send className="h-4 w-4" />
           </button>
-        </div>
-      </div>
-
-      {/* Estatísticas Rápidas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="mobile-card text-center">
-          <div className="text-2xl font-bold text-blue-600">{insights.length}</div>
-          <div className="text-sm text-gray-600">Insights Gerados</div>
-        </div>
-        
-        <div className="mobile-card text-center">
-          <div className="text-2xl font-bold text-green-600">
-            {insights.filter(i => i.type === 'positive').length}
-          </div>
-          <div className="text-sm text-gray-600">Conquistas</div>
-        </div>
-        
-        <div className="mobile-card text-center">
-          <div className="text-2xl font-bold text-orange-600">
-            {insights.filter(i => i.type === 'warning').length}
-          </div>
-          <div className="text-sm text-gray-600">Atenções</div>
-        </div>
-        
-        <div className="mobile-card text-center">
-          <div className="text-2xl font-bold text-purple-600">{chatHistory.length}</div>
-          <div className="text-sm text-gray-600">Conversas</div>
         </div>
       </div>
     </div>

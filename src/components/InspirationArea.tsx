@@ -48,6 +48,7 @@ export default function InspirationArea() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchContent();
@@ -57,17 +58,68 @@ export default function InspirationArea() {
 
   const fetchContent = async () => {
     try {
+      setError(null);
       const { data, error } = await supabase
         .from('inspirational_content')
         .select('*')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setContent(data || []);
+      if (error) {
+        console.error('Error fetching content:', error);
+        // Se der erro, usar conteúdo padrão
+        setContent(getDefaultContent());
+        return;
+      }
+      
+      // Se não há dados, usar conteúdo padrão
+      if (!data || data.length === 0) {
+        setContent(getDefaultContent());
+      } else {
+        setContent(data);
+      }
     } catch (error) {
       console.error('Error fetching content:', error);
+      setContent(getDefaultContent());
     }
+  };
+
+  const getDefaultContent = (): InspirationalContent[] => {
+    return [
+      {
+        id: '1',
+        type: 'quote',
+        title: 'Motivação Diária',
+        content: 'A persistência é o caminho do êxito. Cada dia é uma nova oportunidade para ser melhor.',
+        author: 'Desconhecido',
+        category: 'motivation',
+        tags: ['motivação', 'sucesso'],
+        is_active: true,
+        created_at: new Date().toISOString()
+      },
+      {
+        id: '2',
+        type: 'article',
+        title: 'Técnicas de Estudo Eficazes',
+        content: 'O método Pomodoro é uma das técnicas mais eficazes para manter o foco durante os estudos. Trabalhe por 25 minutos e faça uma pausa de 5 minutos.',
+        author: 'Especialista em Produtividade',
+        category: 'study',
+        tags: ['estudo', 'produtividade', 'pomodoro'],
+        is_active: true,
+        created_at: new Date().toISOString()
+      },
+      {
+        id: '3',
+        type: 'quote',
+        title: 'Foco e Determinação',
+        content: 'O sucesso não é final, o fracasso não é fatal: é a coragem de continuar que conta.',
+        author: 'Winston Churchill',
+        category: 'success',
+        tags: ['sucesso', 'determinação'],
+        is_active: true,
+        created_at: new Date().toISOString()
+      }
+    ];
   };
 
   const fetchPlaylists = async () => {
@@ -129,6 +181,8 @@ export default function InspirationArea() {
       await fetchContent();
     } catch (error) {
       console.error('Error refreshing content:', error);
+      // Se der erro na IA, pelo menos recarregar o conteúdo existente
+      await fetchContent();
     } finally {
       setRefreshing(false);
     }
@@ -181,6 +235,20 @@ export default function InspirationArea() {
     playlists: playlists.length
   };
 
+  // Garantir que o loading pare após um tempo máximo
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (loading) {
+        setLoading(false);
+        if (content.length === 0) {
+          setContent(getDefaultContent());
+        }
+      }
+    }, 5000); // 5 segundos máximo
+
+    return () => clearTimeout(timer);
+  }, [loading, content.length]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -199,238 +267,158 @@ export default function InspirationArea() {
             Área de Inspiração
           </h1>
         </div>
-        <p className="text-gray-600">
-          Conteúdo inspirador e motivacional atualizado pela IA
+        <p className="text-gray-600 mb-4">
+          Encontre motivação, conhecimento e inspiração para seus objetivos
         </p>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="mobile-card text-center">
-          <div className="text-2xl font-bold text-blue-600">{stats.totalContent}</div>
-          <div className="text-sm text-gray-600">Conteúdos</div>
-        </div>
-        <div className="mobile-card text-center">
-          <div className="text-2xl font-bold text-pink-600">{stats.quotes}</div>
-          <div className="text-sm text-gray-600">Frases</div>
-        </div>
-        <div className="mobile-card text-center">
-          <div className="text-2xl font-bold text-green-600">{stats.articles}</div>
-          <div className="text-sm text-gray-600">Artigos</div>
-        </div>
-        <div className="mobile-card text-center">
-          <div className="text-2xl font-bold text-purple-600">{stats.playlists}</div>
-          <div className="text-sm text-gray-600">Playlists</div>
-        </div>
-      </div>
-
-      {/* Controls */}
-      <div className="glass-card p-4">
-        <div className="flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="input-field text-sm"
-            >
-              <option value="all">Todas as categorias</option>
-              <option value="motivation">Motivação</option>
-              <option value="study">Estudos</option>
-              <option value="success">Sucesso</option>
-              <option value="focus">Foco</option>
-              <option value="politics">Política</option>
-              <option value="entrepreneurship">Empreendedorismo</option>
-            </select>
-          </div>
-
-          <button
-            onClick={refreshContent}
-            disabled={refreshing}
-            className="btn-primary flex items-center px-4 py-2"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Atualizando...' : 'Atualizar Conteúdo'}
-          </button>
-        </div>
-      </div>
-
-      {/* Quotes Section */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold flex items-center">
-          <Quote className="h-6 w-6 mr-2 text-blue-600" />
-          Frases Motivacionais
-        </h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredContent.filter(c => c.type === 'quote').slice(0, 4).map((item) => (
-            <div key={item.id} className="glass-card p-6 relative">
-              <div className="flex items-start justify-between mb-4">
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-blue-600">{stats.totalContent}</div>
+            <div className="text-sm text-gray-600">Conteúdos</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600">{stats.quotes}</div>
+            <div className="text-sm text-gray-600">Frases</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-purple-600">{stats.articles}</div>
+            <div className="text-sm text-gray-600">Artigos</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-orange-600">{stats.playlists}</div>
+            <div className="text-sm text-gray-600">Playlists</div>
+          </div>
+        </div>
+
+        {/* Refresh Button */}
+        <button
+          onClick={refreshContent}
+          disabled={refreshing}
+          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Atualizando...' : 'Atualizar Conteúdo'}
+        </button>
+      </div>
+
+      {/* Category Filter */}
+      <div className="glass-card p-4">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+              selectedCategory === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Todos
+          </button>
+          {['motivation', 'study', 'success', 'focus', 'politics', 'entrepreneurship'].map(category => (
+            <button
+              key={category}
+              onClick={() => setSelectedCategory(category)}
+              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors flex items-center ${
+                selectedCategory === category
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {getCategoryIcon(category)}
+              <span className="ml-1">{getCategoryName(category)}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Content Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredContent.map((item) => (
+          <div key={item.id} className="glass-card p-6 hover:scale-105 transition-transform">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center">
+                {item.type === 'quote' ? (
+                  <Quote className="h-6 w-6 text-blue-600 mr-2" />
+                ) : (
+                  <BookOpen className="h-6 w-6 text-green-600 mr-2" />
+                )}
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(item.category)}`}>
                   {getCategoryName(item.category)}
                 </span>
-                <button
-                  onClick={() => toggleFavorite(item.id)}
-                  className={`p-2 rounded-lg transition-colors ${
-                    favorites.includes(item.id)
-                      ? 'text-red-500 bg-red-50'
-                      : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
-                  }`}
-                >
-                  <Heart className={`h-4 w-4 ${favorites.includes(item.id) ? 'fill-current' : ''}`} />
-                </button>
               </div>
-              
-              <blockquote className="text-lg font-medium text-gray-800 mb-3">
-                "{item.content}"
-              </blockquote>
-              
-              {item.author && (
-                <cite className="text-sm text-gray-600">— {item.author}</cite>
-              )}
-              
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                <div className="flex space-x-2">
-                  <button className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
-                    <Share2 className="h-4 w-4" />
-                  </button>
-                  <button className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
-                    <Bookmark className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
+              <button
+                onClick={() => toggleFavorite(item.id)}
+                className={`p-1 rounded-full transition-colors ${
+                  favorites.includes(item.id)
+                    ? 'text-red-500 bg-red-50'
+                    : 'text-gray-400 hover:text-red-500'
+                }`}
+              >
+                <Heart className={`h-4 w-4 ${favorites.includes(item.id) ? 'fill-current' : ''}`} />
+              </button>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Articles Section */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold flex items-center">
-          <BookOpen className="h-6 w-6 mr-2 text-blue-600" />
-          Artigos e Resumos
-        </h2>
-        
-        <div className="space-y-4">
-          {filteredContent.filter(c => c.type === 'article').slice(0, 3).map((item) => (
-            <div key={item.id} className="glass-card p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center space-x-3">
-                  {getCategoryIcon(item.category)}
-                  <h3 className="text-lg font-semibold">{item.title}</h3>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(item.category)}`}>
-                    {getCategoryName(item.category)}
-                  </span>
-                </div>
-                <button
-                  onClick={() => toggleFavorite(item.id)}
-                  className={`p-2 rounded-lg transition-colors ${
-                    favorites.includes(item.id)
-                      ? 'text-red-500 bg-red-50'
-                      : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
-                  }`}
-                >
-                  <Heart className={`h-4 w-4 ${favorites.includes(item.id) ? 'fill-current' : ''}`} />
+            <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
+            <p className="text-gray-600 mb-4 line-clamp-3">{item.content}</p>
+            
+            {item.author && (
+              <p className="text-sm text-gray-500 mb-4">— {item.author}</p>
+            )}
+
+            <div className="flex items-center justify-between">
+              <div className="flex space-x-2">
+                <button className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
+                  <Share2 className="h-4 w-4" />
+                </button>
+                <button className="p-2 text-gray-400 hover:text-green-600 transition-colors">
+                  <Bookmark className="h-4 w-4" />
                 </button>
               </div>
-              
-              <p className="text-gray-700 mb-4 line-clamp-3">{item.content}</p>
-              
-              <div className="flex items-center justify-between">
-                <div className="flex space-x-4 text-sm text-gray-500">
-                  <span>{item.tags.slice(0, 3).join(', ')}</span>
-                </div>
-                <div className="flex space-x-2">
-                  <button className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
-                    <Share2 className="h-4 w-4" />
-                  </button>
-                  <button className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
-                    <Bookmark className="h-4 w-4" />
-                  </button>
-                </div>
+              <div className="flex flex-wrap gap-1">
+                {item.tags.slice(0, 2).map((tag, index) => (
+                  <span key={index} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                    {tag}
+                  </span>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
 
       {/* Playlists Section */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold flex items-center">
-          <Music className="h-6 w-6 mr-2 text-blue-600" />
-          Playlists para Foco e Treino
+      <div className="glass-card p-6">
+        <h2 className="text-xl font-bold mb-4 flex items-center">
+          <Music className="h-6 w-6 mr-2 text-purple-600" />
+          Playlists Recomendadas
         </h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {playlists.map((playlist) => (
-            <div key={playlist.id} className="glass-card p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold">{playlist.title}</h3>
-                  <p className="text-gray-600 text-sm">{playlist.description}</p>
-                </div>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  playlist.category === 'focus' ? 'bg-blue-100 text-blue-600' :
-                  playlist.category === 'workout' ? 'bg-green-100 text-green-600' :
-                  playlist.category === 'study' ? 'bg-purple-100 text-purple-600' :
-                  'bg-orange-100 text-orange-600'
-                }`}>
-                  {playlist.category === 'focus' ? 'Foco' :
-                   playlist.category === 'workout' ? 'Treino' :
-                   playlist.category === 'study' ? 'Estudo' : 'Relaxamento'}
-                </span>
-              </div>
+            <div key={playlist.id} className="bg-white/50 rounded-lg p-4 hover:bg-white/70 transition-colors">
+              <h3 className="font-semibold mb-2">{playlist.title}</h3>
+              <p className="text-gray-600 text-sm mb-3">{playlist.description}</p>
               
-              <div className="space-y-2 mb-4">
-                {playlist.tracks.slice(0, 3).map((track, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                    <div className="flex-1">
-                      <div className="font-medium text-sm">{track.title}</div>
-                      <div className="text-xs text-gray-600">{track.artist}</div>
+              <div className="space-y-2">
+                {playlist.tracks.slice(0, 2).map((track, index) => (
+                  <div key={index} className="flex items-center justify-between text-sm">
+                    <div>
+                      <div className="font-medium">{track.title}</div>
+                      <div className="text-gray-500">{track.artist}</div>
                     </div>
-                    <div className="text-xs text-gray-500">{track.duration}</div>
+                    <div className="text-gray-500">{track.duration}</div>
                   </div>
                 ))}
               </div>
               
-              <button className="btn-primary w-full">
+              <button className="mt-3 w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition-colors">
                 Ouvir Playlist
               </button>
             </div>
           ))}
         </div>
       </div>
-
-      {/* Favorites Section */}
-      {favorites.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold flex items-center">
-            <Heart className="h-6 w-6 mr-2 text-red-500" />
-            Seus Favoritos
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {content.filter(c => favorites.includes(c.id)).slice(0, 2).map((item) => (
-              <div key={item.id} className="glass-card p-4 border-2 border-red-200">
-                <div className="flex items-center justify-between mb-2">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(item.category)}`}>
-                    {getCategoryName(item.category)}
-                  </span>
-                  <button
-                    onClick={() => toggleFavorite(item.id)}
-                    className="p-1 text-red-500 hover:text-red-700"
-                  >
-                    <Heart className="h-4 w-4 fill-current" />
-                  </button>
-                </div>
-                
-                <p className="text-sm text-gray-700">
-                  {item.type === 'quote' ? `"${item.content}"` : item.content}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
