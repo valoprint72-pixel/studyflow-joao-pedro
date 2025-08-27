@@ -7,13 +7,16 @@ import AccountManager from './components/AccountManager';
 import SelfKnowledgeDashboard from './components/SelfKnowledgeDashboard';
 import PomodoroTimer from './components/PomodoroTimer';
 import AIFeedback from './components/AIFeedback';
+import TaskManager from './components/TaskManager';
+import SurveyManager from './components/SurveyManager';
+import InspirationArea from './components/InspirationArea';
 import Login from './components/Login';
 import InstallPrompt from './components/InstallPrompt';
 import { initializeNotifications } from './utils/notifications';
 import { User } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 
-type Page = 'dashboard' | 'studies' | 'finances' | 'accounts' | 'self-knowledge' | 'pomodoro' | 'ai-feedback';
+type Page = 'dashboard' | 'studies' | 'finances' | 'accounts' | 'self-knowledge' | 'pomodoro' | 'ai-feedback' | 'tasks' | 'surveys' | 'inspiration';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -82,12 +85,18 @@ function App() {
         return <FinanceManager selectedAccountId={selectedAccountId} />;
       case 'accounts':
         return <AccountManager onAccountSelect={setSelectedAccountId} selectedAccountId={selectedAccountId} />;
-      case 'self-knowledge':
-        return <SelfKnowledgeDashboard />;
+              case 'self-knowledge':
+          return <SelfKnowledgeDashboard onNavigate={setCurrentPage} />;
       case 'pomodoro':
         return <PomodoroTimer />;
-      case 'ai-feedback':
-        return <AIFeedback />;
+              case 'ai-feedback':
+          return <AIFeedback onNavigate={setCurrentPage} />;
+        case 'tasks':
+          return <TaskManager />;
+        case 'surveys':
+          return <SurveyManager />;
+        case 'inspiration':
+          return <InspirationArea />;
       default:
         return <Dashboard />;
     }

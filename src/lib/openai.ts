@@ -1,7 +1,14 @@
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
 export interface AIAnalysis {
-  insights: string[];
+  insights: Array<{
+    type: 'positive' | 'suggestion' | 'warning' | 'motivation';
+    title: string;
+    message: string;
+    icon: string;
+    action?: string;
+    priority: 'high' | 'medium' | 'low';
+  }>;
   suggestions: string[];
   motivation: string;
   score: number;
@@ -57,9 +64,9 @@ export class OpenAIService {
 
   static async analyzeHabits(habits: any[], goals: any[], studyData: any): Promise<AIAnalysis> {
     const prompt = `
-      Analise os dados do usuário e forneça insights personalizados:
+      Analise os dados do usuário e forneça insights personalizados e acionáveis:
       
-      HÁBITOS (últimos 7 dias):
+      HÁBITOS:
       ${JSON.stringify(habits, null, 2)}
       
       METAS:
@@ -68,9 +75,18 @@ export class OpenAIService {
       DADOS DE ESTUDO:
       ${JSON.stringify(studyData, null, 2)}
       
-      Forneça uma análise estruturada em JSON com:
+      Forneça uma análise estruturada em JSON com insights específicos:
       {
-        "insights": ["3 insights principais sobre padrões"],
+        "insights": [
+          {
+            "type": "positive|suggestion|warning|motivation",
+            "title": "Título do insight",
+            "message": "Mensagem detalhada e motivacional",
+            "icon": "emoji ou ícone",
+            "action": "ação sugerida (opcional)",
+            "priority": "high|medium|low"
+          }
+        ],
         "suggestions": ["3 sugestões práticas para melhorar"],
         "motivation": "mensagem motivacional personalizada",
         "score": número de 1-10,
@@ -79,6 +95,15 @@ export class OpenAIService {
           "improvement": ["áreas para melhorar"]
         }
       }
+      
+      IMPORTANTE: 
+      - Se não há hábitos, sugira criar o primeiro hábito
+      - Se não há metas, sugira definir metas
+      - Se não há sessões de estudo, sugira usar o Pomodoro
+      - Se não há dados financeiros, sugira controle financeiro
+      - Seja específico e acionável
+      - Use emojis apropriados para os ícones
+      - Priorize insights de alta prioridade para dados ausentes
     `;
 
     const response = await this.makeRequest(prompt);
@@ -86,8 +111,42 @@ export class OpenAIService {
     try {
       return JSON.parse(response);
     } catch {
+      // Fallback com insights básicos
       return {
-        insights: ['Analisando seus dados...'],
+        insights: [
+          {
+            type: 'suggestion',
+            title: 'Comece com Hábitos',
+            message: 'Você ainda não tem hábitos cadastrados. Que tal começar com algo simples como "Beber água" ou "Ler 10 minutos"?',
+            icon: '🌱',
+            action: 'Criar primeiro hábito',
+            priority: 'high'
+          },
+          {
+            type: 'suggestion',
+            title: 'Defina Metas',
+            message: 'Metas dão direção ao seu progresso. Que tal definir uma meta para esta semana?',
+            icon: '🎯',
+            action: 'Criar primeira meta',
+            priority: 'high'
+          },
+          {
+            type: 'suggestion',
+            title: 'Inicie uma Sessão de Estudo',
+            message: 'Use o Timer Pomodoro para focar nos estudos. 25 minutos de foco podem fazer a diferença!',
+            icon: '📚',
+            action: 'Iniciar Pomodoro',
+            priority: 'medium'
+          },
+          {
+            type: 'suggestion',
+            title: 'Controle Financeiro',
+            message: 'Comece a registrar suas despesas e receitas para ter melhor controle financeiro.',
+            icon: '💰',
+            action: 'Registrar transação',
+            priority: 'medium'
+          }
+        ],
         suggestions: ['Continue monitorando seus hábitos'],
         motivation: 'Você está no caminho certo!',
         score: 7,
@@ -143,5 +202,34 @@ export class OpenAIService {
     };
 
     return await this.makeRequest(prompts[category]);
+  }
+
+  static async generateArticle(category: 'study' | 'politics' | 'entrepreneurship'): Promise<string> {
+    const prompts = {
+      study: 'Gere um resumo curto e inspirador sobre técnicas de estudo ou aprendizado. Máximo 3 parágrafos.',
+      politics: 'Gere um resumo curto sobre um conceito político atual ou histórico. Máximo 3 parágrafos.',
+      entrepreneurship: 'Gere um resumo curto sobre empreendedorismo ou negócios. Máximo 3 parágrafos.'
+    };
+
+    return await this.makeRequest(prompts[category]);
+  }
+
+  static async analyzeSurveyResponse(survey: any, answers: any): Promise<string> {
+    const prompt = `
+      Analise as respostas do questionário e forneça insights personalizados:
+      
+      Questionário: ${JSON.stringify(survey, null, 2)}
+      Respostas: ${JSON.stringify(answers, null, 2)}
+      
+      Forneça uma análise em português com:
+      - Padrões identificados
+      - Pontos fortes
+      - Áreas para desenvolvimento
+      - Sugestões práticas
+      
+      Seja motivacional e construtivo. Máximo 2 parágrafos.
+    `;
+
+    return await this.makeRequest(prompt);
   }
 }

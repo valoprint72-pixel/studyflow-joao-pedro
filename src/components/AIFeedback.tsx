@@ -38,7 +38,11 @@ interface FeedbackInsight {
   priority: 'high' | 'medium' | 'low';
 }
 
-export default function AIFeedback() {
+interface AIFeedbackProps {
+  onNavigate?: (page: string) => void;
+}
+
+export default function AIFeedback({ onNavigate }: AIFeedbackProps) {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [insights, setInsights] = useState<FeedbackInsight[]>([]);
   const [currentFeedback, setCurrentFeedback] = useState<AIFeedbackType | null>(null);
@@ -88,44 +92,34 @@ export default function AIFeedback() {
     try {
       setAnalyzing(true);
       
-      // Análise de hábitos
-      const habitInsights = await analyzeHabits(data.habits);
+      // Gerar insights usando IA
+      const aiInsights = await OpenAIService.analyzeHabits(data.habits, data.goals, data.studySessions);
       
-      // Análise de metas
-      const goalInsights = await analyzeGoals(data.goals);
-      
-      // Análise de estudos
-      const studyInsights = await analyzeStudySessions(data.studySessions);
-      
-      // Análise financeira
-      const financialInsights = await analyzeFinancialData(data.financialData);
-      
-      // Análise geral
-      const generalInsights = await analyzeGeneralProgress(data);
-      
-      const allInsights = [
-        ...habitInsights,
-        ...goalInsights,
-        ...studyInsights,
-        ...financialInsights,
-        ...generalInsights
-      ].sort((a, b) => {
-        const priorityOrder = { high: 3, medium: 2, low: 1 };
-        return priorityOrder[b.priority] - priorityOrder[a.priority];
-      });
+      // Converter insights da IA para o formato local
+      const insights: FeedbackInsight[] = aiInsights.insights.map((insight: any) => ({
+        type: insight.type,
+        title: insight.title,
+        message: insight.message,
+        icon: insight.icon || '💡',
+        action: insight.action,
+        priority: insight.priority || 'medium'
+      }));
 
-      setInsights(allInsights);
+      setInsights(insights);
     } catch (error) {
       console.error('Error generating insights:', error);
+      // Fallback para insights básicos se a IA falhar
+      const fallbackInsights = await generateFallbackInsights(data);
+      setInsights(fallbackInsights);
     } finally {
       setAnalyzing(false);
     }
   };
 
-  const analyzeHabits = async (habits: any[]): Promise<FeedbackInsight[]> => {
+  const generateFallbackInsights = async (data: UserData): Promise<FeedbackInsight[]> => {
     const insights: FeedbackInsight[] = [];
     
-    if (habits.length === 0) {
+    if (data.habits.length === 0) {
       insights.push({
         type: 'suggestion',
         title: 'Comece com Hábitos',
@@ -134,41 +128,9 @@ export default function AIFeedback() {
         action: 'Criar primeiro hábito',
         priority: 'high'
       });
-      return insights;
     }
 
-    const activeHabits = habits.filter(h => h.is_active);
-    const completedToday = habits.filter(h => h.current_streak > 0);
-    const longestStreak = Math.max(...habits.map(h => h.longest_streak));
-
-    if (completedToday.length === 0) {
-      insights.push({
-        type: 'warning',
-        title: 'Hábitos Negligenciados',
-        message: 'Você não completou nenhum hábito hoje. Lembre-se: consistência é a chave do sucesso!',
-        icon: '⚠️',
-        action: 'Completar hábitos',
-        priority: 'high'
-      });
-    }
-
-    if (longestStreak >= 7) {
-      insights.push({
-        type: 'positive',
-        title: 'Consistência Impressionante!',
-        message: `Você manteve um hábito por ${longestStreak} dias seguidos. Isso é incrível!`,
-        icon: '🔥',
-        priority: 'medium'
-      });
-    }
-
-    return insights;
-  };
-
-  const analyzeGoals = async (goals: any[]): Promise<FeedbackInsight[]> => {
-    const insights: FeedbackInsight[] = [];
-    
-    if (goals.length === 0) {
+    if (data.goals.length === 0) {
       insights.push({
         type: 'suggestion',
         title: 'Defina Metas',
@@ -177,41 +139,9 @@ export default function AIFeedback() {
         action: 'Criar primeira meta',
         priority: 'high'
       });
-      return insights;
     }
 
-    const activeGoals = goals.filter(g => g.status === 'active');
-    const completedGoals = goals.filter(g => g.status === 'completed');
-    const overdueGoals = goals.filter(g => g.deadline && new Date(g.deadline) < new Date());
-
-    if (completedGoals.length > 0) {
-      insights.push({
-        type: 'positive',
-        title: 'Metas Concluídas!',
-        message: `Parabéns! Você completou ${completedGoals.length} meta(s). Continue assim!`,
-        icon: '🏆',
-        priority: 'medium'
-      });
-    }
-
-    if (overdueGoals.length > 0) {
-      insights.push({
-        type: 'warning',
-        title: 'Metas Atrasadas',
-        message: `Você tem ${overdueGoals.length} meta(s) atrasada(s). Que tal revisar e ajustar?`,
-        icon: '⏰',
-        action: 'Revisar metas',
-        priority: 'high'
-      });
-    }
-
-    return insights;
-  };
-
-  const analyzeStudySessions = async (sessions: any[]): Promise<FeedbackInsight[]> => {
-    const insights: FeedbackInsight[] = [];
-    
-    if (sessions.length === 0) {
+    if (data.studySessions.length === 0) {
       insights.push({
         type: 'suggestion',
         title: 'Inicie uma Sessão de Estudo',
@@ -220,42 +150,9 @@ export default function AIFeedback() {
         action: 'Iniciar Pomodoro',
         priority: 'medium'
       });
-      return insights;
     }
 
-    const todaySessions = sessions.filter(s => 
-      new Date(s.completed_at).toDateString() === new Date().toDateString()
-    );
-    const totalStudyTime = sessions.reduce((total, s) => total + (s.completed_minutes || 0), 0);
-
-    if (todaySessions.length === 0) {
-      insights.push({
-        type: 'suggestion',
-        message: 'Você ainda não estudou hoje. Que tal uma sessão de 25 minutos?',
-        title: 'Hora de Estudar',
-        icon: '⏰',
-        action: 'Iniciar estudo',
-        priority: 'medium'
-      });
-    }
-
-    if (totalStudyTime >= 120) {
-      insights.push({
-        type: 'positive',
-        title: 'Estudioso Dedicado!',
-        message: `Você já estudou ${Math.floor(totalStudyTime / 60)} horas. Incrível dedicação!`,
-        icon: '🎓',
-        priority: 'low'
-      });
-    }
-
-    return insights;
-  };
-
-  const analyzeFinancialData = async (transactions: any[]): Promise<FeedbackInsight[]> => {
-    const insights: FeedbackInsight[] = [];
-    
-    if (transactions.length === 0) {
+    if (data.financialData.length === 0) {
       insights.push({
         type: 'suggestion',
         title: 'Controle Financeiro',
@@ -264,65 +161,49 @@ export default function AIFeedback() {
         action: 'Registrar transação',
         priority: 'medium'
       });
-      return insights;
-    }
-
-    const recentTransactions = transactions.filter(t => 
-      new Date(t.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-    );
-    const expenses = recentTransactions.filter(t => t.type === 'expense');
-    const income = recentTransactions.filter(t => t.type === 'income');
-
-    if (expenses.length > income.length * 2) {
-      insights.push({
-        type: 'warning',
-        title: 'Atenção aos Gastos',
-        message: 'Você tem mais despesas que receitas recentemente. Que tal revisar seus gastos?',
-        icon: '💸',
-        action: 'Revisar finanças',
-        priority: 'high'
-      });
     }
 
     return insights;
   };
 
-  const analyzeGeneralProgress = async (data: UserData): Promise<FeedbackInsight[]> => {
-    const insights: FeedbackInsight[] = [];
-    
-    const totalAchievements = data.achievements.length;
-    const totalHabits = data.habits.length;
-    const totalGoals = data.goals.length;
+  const handleInsightAction = (action: string) => {
+    if (!onNavigate) return;
 
-    if (totalAchievements === 0 && totalHabits > 0) {
-      insights.push({
-        type: 'motivation',
-        title: 'Primeira Conquista',
-        message: 'Continue com seus hábitos! Você está próximo de sua primeira conquista.',
-        icon: '⭐',
-        priority: 'medium'
-      });
+    // Mapear ações para páginas
+    const actionMap: { [key: string]: string } = {
+      'Criar primeiro hábito': 'self-knowledge',
+      'Criar primeira meta': 'self-knowledge',
+      'Iniciar Pomodoro': 'pomodoro',
+      'Registrar transação': 'finances',
+      'Completar hábitos': 'self-knowledge',
+      'Revisar metas': 'self-knowledge',
+      'Iniciar estudo': 'pomodoro',
+      'Revisar finanças': 'finances'
+    };
+
+    const targetPage = actionMap[action];
+    if (targetPage) {
+      onNavigate(targetPage);
     }
-
-    if (totalHabits >= 3 && totalGoals >= 2) {
-      insights.push({
-        type: 'positive',
-        title: 'Planejamento Completo',
-        message: 'Você tem uma boa base de hábitos e metas. Isso mostra organização!',
-        icon: '📋',
-        priority: 'low'
-      });
-    }
-
-    return insights;
   };
+
+
 
   const askAIQuestion = async () => {
     if (!userQuestion.trim() || !userData) return;
 
+    const currentQuestion = userQuestion;
+    setUserQuestion(''); // Limpar imediatamente para melhor UX
+
     try {
       setAnalyzing(true);
       
+      // Adicionar pergunta ao histórico imediatamente
+      setChatHistory(prev => [...prev, {
+        question: currentQuestion,
+        answer: 'Analisando...'
+      }]);
+
       const context = `
         Dados do usuário:
         - Hábitos: ${userData.habits.length} ativos
@@ -331,20 +212,31 @@ export default function AIFeedback() {
         - Transações financeiras: ${userData.financialData.length}
         - Conquistas: ${userData.achievements.length}
         
-        Pergunta: ${userQuestion}
+        Histórico da conversa:
+        ${chatHistory.map(chat => `P: ${chat.question}\nR: ${chat.answer}`).join('\n')}
+        
+        Nova pergunta: ${currentQuestion}
       `;
 
       const feedback = await OpenAIService.getPersonalizedAdvice(context, userData);
+      
+      // Atualizar a resposta no histórico
+      setChatHistory(prev => {
+        const newHistory = [...prev];
+        newHistory[newHistory.length - 1].answer = feedback.message;
+        return newHistory;
+      });
+      
       setCurrentFeedback(feedback);
-      
-      setChatHistory(prev => [...prev, {
-        question: userQuestion,
-        answer: feedback.message
-      }]);
-      
-      setUserQuestion('');
     } catch (error) {
       console.error('Error asking AI question:', error);
+      
+      // Atualizar com erro no histórico
+      setChatHistory(prev => {
+        const newHistory = [...prev];
+        newHistory[newHistory.length - 1].answer = 'Desculpe, houve um erro ao processar sua pergunta. Tente novamente.';
+        return newHistory;
+      });
     } finally {
       setAnalyzing(false);
     }
@@ -393,51 +285,7 @@ export default function AIFeedback() {
         </p>
       </div>
 
-      {/* Chat com IA */}
-      <div className="glass-card p-6">
-        <div className="flex items-center mb-4">
-          <MessageSquare className="h-6 w-6 text-blue-600 mr-2" />
-          <h2 className="text-xl font-bold">Pergunte ao seu Coach IA</h2>
-        </div>
-        
-        <div className="space-y-4">
-          <div className="flex space-x-2">
-            <input
-              type="text"
-              value={userQuestion}
-              onChange={(e) => setUserQuestion(e.target.value)}
-              placeholder="Ex: Como posso melhorar meus hábitos? Como estudar melhor?"
-              className="input-field flex-1"
-              onKeyPress={(e) => e.key === 'Enter' && askAIQuestion()}
-            />
-            <button
-              onClick={askAIQuestion}
-              disabled={analyzing || !userQuestion.trim()}
-              className="btn-primary flex items-center px-4"
-            >
-              {analyzing ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </button>
-          </div>
 
-          {currentFeedback && (
-            <div className={`p-4 rounded-xl bg-gradient-to-r ${getInsightColor(currentFeedback.type)} text-white`}>
-              <div className="flex items-start space-x-3">
-                {getInsightIcon(currentFeedback.type)}
-                <div className="flex-1">
-                  <p className="font-medium">{currentFeedback.message}</p>
-                  {currentFeedback.action && (
-                    <p className="text-sm opacity-90 mt-1">Ação sugerida: {currentFeedback.action}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* Insights Automáticos */}
       <div className="glass-card p-6">
@@ -480,7 +328,10 @@ export default function AIFeedback() {
                       <h3 className="font-semibold mb-1">{insight.title}</h3>
                       <p className="text-sm opacity-90">{insight.message}</p>
                       {insight.action && (
-                        <button className="mt-2 px-3 py-1 bg-white/20 rounded-lg text-xs font-medium hover:bg-white/30 transition-colors">
+                        <button 
+                          onClick={() => handleInsightAction(insight.action!)}
+                          className="mt-2 px-3 py-1 bg-white/20 rounded-lg text-xs font-medium hover:bg-white/30 transition-colors"
+                        >
                           {insight.action}
                         </button>
                       )}
@@ -500,30 +351,79 @@ export default function AIFeedback() {
         )}
       </div>
 
-      {/* Histórico de Conversas */}
-      {chatHistory.length > 0 && (
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center">
-            <MessageSquare className="h-5 w-5 mr-2" />
-            Histórico de Conversas
-          </h3>
-          
-          <div className="space-y-4 max-h-64 overflow-y-auto">
-            {chatHistory.map((chat, index) => (
-              <div key={index} className="space-y-2">
-                <div className="bg-blue-50 p-3 rounded-lg">
-                  <p className="text-sm font-medium text-blue-800">Você:</p>
-                  <p className="text-sm text-blue-700">{chat.question}</p>
+      {/* Chat Contínuo */}
+      <div className="glass-card p-6">
+        <h3 className="text-lg font-semibold mb-4 flex items-center">
+          <MessageSquare className="h-5 w-5 mr-2" />
+          Conversa com seu Coach IA
+        </h3>
+        
+        <div className="space-y-4 max-h-96 overflow-y-auto mb-4 p-4 bg-gray-50 rounded-lg">
+          {chatHistory.length === 0 ? (
+            <div className="text-center text-gray-500 py-8">
+              <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p>Faça sua primeira pergunta ao seu coach IA!</p>
+              <p className="text-sm mt-1">Ex: "Como posso melhorar meus hábitos?"</p>
+            </div>
+          ) : (
+            chatHistory.map((chat, index) => (
+              <div key={index} className="space-y-3">
+                {/* Pergunta do usuário */}
+                <div className="flex justify-end">
+                  <div className="bg-blue-600 text-white p-3 rounded-lg max-w-xs lg:max-w-md">
+                    <p className="text-sm">{chat.question}</p>
+                  </div>
                 </div>
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <p className="text-sm font-medium text-gray-800">Coach IA:</p>
-                  <p className="text-sm text-gray-700">{chat.answer}</p>
+                
+                {/* Resposta da IA */}
+                <div className="flex justify-start">
+                  <div className="bg-white border border-gray-200 p-3 rounded-lg max-w-xs lg:max-w-md">
+                    <div className="flex items-center mb-2">
+                      <Brain className="h-4 w-4 text-blue-600 mr-2" />
+                      <span className="text-xs font-medium text-gray-600">Coach IA</span>
+                    </div>
+                    <p className="text-sm text-gray-800">{chat.answer}</p>
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
+            ))
+          )}
+          
+          {analyzing && (
+            <div className="flex justify-start">
+              <div className="bg-white border border-gray-200 p-3 rounded-lg">
+                <div className="flex items-center">
+                  <RefreshCw className="h-4 w-4 text-blue-600 mr-2 animate-spin" />
+                  <span className="text-sm text-gray-600">Analisando...</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+        
+        {/* Input para nova pergunta */}
+        <div className="flex space-x-2">
+          <input
+            type="text"
+            value={userQuestion}
+            onChange={(e) => setUserQuestion(e.target.value)}
+            placeholder="Digite sua pergunta..."
+            className="input-field flex-1"
+            onKeyPress={(e) => e.key === 'Enter' && askAIQuestion()}
+          />
+          <button
+            onClick={askAIQuestion}
+            disabled={analyzing || !userQuestion.trim()}
+            className="btn-primary flex items-center px-4"
+          >
+            {analyzing ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      </div>
 
       {/* Estatísticas Rápidas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

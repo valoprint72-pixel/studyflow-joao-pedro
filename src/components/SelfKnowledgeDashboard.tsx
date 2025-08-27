@@ -43,13 +43,18 @@ interface GoalData {
   status: string;
 }
 
-export default function SelfKnowledgeDashboard() {
+interface SelfKnowledgeDashboardProps {
+  onNavigate?: (page: string) => void;
+}
+
+export default function SelfKnowledgeDashboard({ onNavigate }: SelfKnowledgeDashboardProps) {
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [habits, setHabits] = useState<HabitData[]>([]);
   const [goals, setGoals] = useState<GoalData[]>([]);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
   const [dailyQuote, setDailyQuote] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [achievements, setAchievements] = useState<any[]>([]);
 
   useEffect(() => {
@@ -63,36 +68,86 @@ export default function SelfKnowledgeDashboard() {
       
       // Buscar dados do usuário
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) return;
+      if (!userData.user) {
+        console.log('No user found');
+        setLoading(false);
+        return;
+      }
 
-      // Buscar estatísticas do usuário
-      const { data: pointsData } = await supabase
-        .from('user_points')
-        .select('*')
-        .eq('user_id', userData.user.id)
-        .single();
+      console.log('Fetching data for user:', userData.user.id);
 
-      // Buscar hábitos
-      const { data: habitsData } = await supabase
-        .from('habits')
-        .select('*')
-        .eq('user_id', userData.user.id)
-        .eq('is_active', true);
+      // Buscar estatísticas do usuário com tratamento de erro
+      let pointsData = null;
+      try {
+        const { data, error } = await supabase
+          .from('user_points')
+          .select('*')
+          .eq('user_id', userData.user.id)
+          .single();
+        
+        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+          console.error('Error fetching user points:', error);
+        } else {
+          pointsData = data;
+        }
+      } catch (error) {
+        console.log('User points table might not exist yet');
+      }
 
-      // Buscar metas
-      const { data: goalsData } = await supabase
-        .from('goals')
-        .select('*')
-        .eq('user_id', userData.user.id);
+      // Buscar hábitos com tratamento de erro
+      let habitsData = [];
+      try {
+        const { data, error } = await supabase
+          .from('habits')
+          .select('*')
+          .eq('user_id', userData.user.id)
+          .eq('is_active', true);
+        
+        if (error) {
+          console.error('Error fetching habits:', error);
+        } else {
+          habitsData = data || [];
+        }
+      } catch (error) {
+        console.log('Habits table might not exist yet');
+      }
 
-      // Buscar conquistas
-      const { data: achievementsData } = await supabase
-        .from('user_achievements')
-        .select(`
-          *,
-          achievements (*)
-        `)
-        .eq('user_id', userData.user.id);
+      // Buscar metas com tratamento de erro
+      let goalsData = [];
+      try {
+        const { data, error } = await supabase
+          .from('goals')
+          .select('*')
+          .eq('user_id', userData.user.id);
+        
+        if (error) {
+          console.error('Error fetching goals:', error);
+        } else {
+          goalsData = data || [];
+        }
+      } catch (error) {
+        console.log('Goals table might not exist yet');
+      }
+
+      // Buscar conquistas com tratamento de erro
+      let achievementsData = [];
+      try {
+        const { data, error } = await supabase
+          .from('user_achievements')
+          .select(`
+            *,
+            achievements (*)
+          `)
+          .eq('user_id', userData.user.id);
+        
+        if (error) {
+          console.error('Error fetching achievements:', error);
+        } else {
+          achievementsData = data || [];
+        }
+      } catch (error) {
+        console.log('Achievements table might not exist yet');
+      }
 
       // Calcular estatísticas
       const stats: UserStats = {
@@ -105,23 +160,30 @@ export default function SelfKnowledgeDashboard() {
         studyTime: 0 // Será calculado depois
       };
 
-      setUserStats(stats);
-      setHabits(habitsData || []);
-      setGoals(goalsData || []);
-      setAchievements(achievementsData || []);
+      console.log('Setting dashboard data:', { stats, habitsData, goalsData, achievementsData });
 
-      // Análise IA
-      if (habitsData && goalsData) {
-        const analysis = await OpenAIService.analyzeHabits(
-          habitsData,
-          goalsData,
-          { studyTime: stats.studyTime }
-        );
-        setAiAnalysis(analysis);
+      setUserStats(stats);
+      setHabits(habitsData);
+      setGoals(goalsData);
+      setAchievements(achievementsData);
+
+      // Análise IA (opcional)
+      try {
+        if (habitsData.length > 0 || goalsData.length > 0) {
+          const analysis = await OpenAIService.analyzeHabits(
+            habitsData,
+            goalsData,
+            { studyTime: stats.studyTime }
+          );
+          setAiAnalysis(analysis);
+        }
+      } catch (error) {
+        console.error('Error generating AI analysis:', error);
       }
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      setError('Erro ao carregar dados do dashboard');
     } finally {
       setLoading(false);
     }
@@ -132,6 +194,7 @@ export default function SelfKnowledgeDashboard() {
       const quote = await OpenAIService.generateQuote('motivation');
       setDailyQuote(quote);
     } catch (error) {
+      console.error('Error fetching daily quote:', error);
       setDailyQuote('A persistência é o caminho do êxito.');
     }
   };
@@ -154,6 +217,27 @@ export default function SelfKnowledgeDashboard() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Erro ao Carregar</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={() => {
+              setError(null);
+              fetchDashboardData();
+            }}
+            className="btn-primary"
+          >
+            Tentar Novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header com Quote */}
@@ -165,7 +249,7 @@ export default function SelfKnowledgeDashboard() {
           </h1>
         </div>
         <p className="text-lg italic text-gray-700 mb-4">
-          "{dailyQuote}"
+          "{dailyQuote || 'A persistência é o caminho do êxito.'}"
         </p>
         <div className="flex justify-center space-x-4 text-sm text-gray-600">
           <span>🎯 Foco</span>
@@ -180,7 +264,7 @@ export default function SelfKnowledgeDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm opacity-90">Nível</p>
-              <p className="text-2xl font-bold">{userStats?.level}</p>
+              <p className="text-2xl font-bold">{userStats?.level || 1}</p>
             </div>
             <Trophy className="h-8 w-8 opacity-80" />
           </div>
@@ -190,7 +274,7 @@ export default function SelfKnowledgeDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm opacity-90">Pontos</p>
-              <p className="text-2xl font-bold">{userStats?.totalPoints}</p>
+              <p className="text-2xl font-bold">{userStats?.totalPoints || 0}</p>
             </div>
             <Star className="h-8 w-8 opacity-80" />
           </div>
@@ -200,7 +284,7 @@ export default function SelfKnowledgeDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm opacity-90">Sequência</p>
-              <p className="text-2xl font-bold">{userStats?.currentStreak} dias</p>
+              <p className="text-2xl font-bold">{userStats?.currentStreak || 0} dias</p>
             </div>
             <Zap className="h-8 w-8 opacity-80" />
           </div>
@@ -210,7 +294,7 @@ export default function SelfKnowledgeDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm opacity-90">Recorde</p>
-              <p className="text-2xl font-bold">{userStats?.longestStreak} dias</p>
+              <p className="text-2xl font-bold">{userStats?.longestStreak || 0} dias</p>
             </div>
             <Award className="h-8 w-8 opacity-80" />
           </div>
@@ -218,7 +302,7 @@ export default function SelfKnowledgeDashboard() {
       </div>
 
       {/* Análise IA */}
-      {aiAnalysis && (
+      {aiAnalysis && aiAnalysis.insights && aiAnalysis.suggestions && (
         <div className="glass-card p-6">
           <div className="flex items-center mb-4">
             <Brain className="h-6 w-6 text-blue-600 mr-2" />
@@ -253,7 +337,7 @@ export default function SelfKnowledgeDashboard() {
 
           <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl">
             <p className="text-center text-gray-800 font-medium">
-              {aiAnalysis.motivation}
+              {aiAnalysis.motivation || 'Continue focado nos seus objetivos!'}
             </p>
           </div>
 
@@ -261,7 +345,7 @@ export default function SelfKnowledgeDashboard() {
             <div className="text-center">
               <p className="text-sm text-gray-600 mb-1">Score de Progresso</p>
               <div className="text-2xl font-bold text-blue-600">
-                {aiAnalysis.score}/10
+                {aiAnalysis.score || 7}/10
               </div>
             </div>
           </div>
@@ -356,6 +440,48 @@ export default function SelfKnowledgeDashboard() {
               </p>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Navegação Rápida */}
+      <div className="glass-card p-6">
+        <h2 className="text-xl font-bold mb-4 flex items-center">
+          <Zap className="h-6 w-6 mr-2 text-blue-600" />
+          Módulos Disponíveis
+        </h2>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <button 
+            onClick={() => onNavigate?.('tasks')}
+            className="mobile-card text-center p-4 hover:scale-105 transition-transform"
+          >
+            <Calendar className="h-8 w-8 mx-auto mb-2 text-blue-600" />
+            <span className="text-sm font-medium">Tarefas</span>
+          </button>
+          
+          <button 
+            onClick={() => onNavigate?.('surveys')}
+            className="mobile-card text-center p-4 hover:scale-105 transition-transform"
+          >
+            <BookOpen className="h-8 w-8 mx-auto mb-2 text-green-600" />
+            <span className="text-sm font-medium">Questionários</span>
+          </button>
+          
+          <button 
+            onClick={() => onNavigate?.('pomodoro')}
+            className="mobile-card text-center p-4 hover:scale-105 transition-transform"
+          >
+            <Clock className="h-8 w-8 mx-auto mb-2 text-purple-600" />
+            <span className="text-sm font-medium">Pomodoro</span>
+          </button>
+          
+          <button 
+            onClick={() => onNavigate?.('inspiration')}
+            className="mobile-card text-center p-4 hover:scale-105 transition-transform"
+          >
+            <Star className="h-8 w-8 mx-auto mb-2 text-orange-600" />
+            <span className="text-sm font-medium">Inspiração</span>
+          </button>
         </div>
       </div>
 
