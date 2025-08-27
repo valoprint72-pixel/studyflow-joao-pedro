@@ -4,13 +4,15 @@ import Dashboard from './components/Dashboard';
 import StudyTracker from './components/StudyTracker';
 import FinanceManager from './components/FinanceManager';
 import AccountManager from './components/AccountManager';
+import SelfKnowledgeDashboard from './components/SelfKnowledgeDashboard';
+import PomodoroTimer from './components/PomodoroTimer';
 import Login from './components/Login';
 import InstallPrompt from './components/InstallPrompt';
 import { initializeNotifications } from './utils/notifications';
 import { User } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 
-type Page = 'dashboard' | 'studies' | 'finances' | 'accounts';
+type Page = 'dashboard' | 'studies' | 'finances' | 'accounts' | 'self-knowledge' | 'pomodoro';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -71,12 +73,18 @@ function App() {
 
   const renderCurrentPage = () => {
     switch (currentPage) {
+      case 'dashboard':
+        return <Dashboard />;
       case 'studies':
         return <StudyTracker />;
       case 'finances':
         return <FinanceManager selectedAccountId={selectedAccountId} />;
       case 'accounts':
         return <AccountManager onAccountSelect={setSelectedAccountId} selectedAccountId={selectedAccountId} />;
+      case 'self-knowledge':
+        return <SelfKnowledgeDashboard />;
+      case 'pomodoro':
+        return <PomodoroTimer />;
       default:
         return <Dashboard />;
     }
@@ -188,6 +196,34 @@ function App() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
               </svg>
               <span className="text-xs mt-1 font-medium">Contas</span>
+            </button>
+            
+            <button
+              onClick={() => setCurrentPage('self-knowledge')}
+              className={`flex flex-col items-center p-3 rounded-xl transition-all duration-300 ${
+                currentPage === 'self-knowledge' 
+                  ? 'bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-lg scale-105' 
+                  : 'text-gray-600 hover:text-indigo-600 hover:scale-105'
+              }`}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <span className="text-xs mt-1 font-medium">Auto</span>
+            </button>
+            
+            <button
+              onClick={() => setCurrentPage('pomodoro')}
+              className={`flex flex-col items-center p-3 rounded-xl transition-all duration-300 ${
+                currentPage === 'pomodoro' 
+                  ? 'bg-gradient-to-br from-yellow-500 to-orange-500 text-white shadow-lg scale-105' 
+                  : 'text-gray-600 hover:text-yellow-600 hover:scale-105'
+              }`}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-xs mt-1 font-medium">Timer</span>
             </button>
           </div>
         </nav>
