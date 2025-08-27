@@ -13,7 +13,6 @@ import {
   Zap,
   Star
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import { OpenAIService } from '../lib/openai';
 
 interface InspirationalContent {
@@ -44,45 +43,17 @@ interface Playlist {
 export default function InspirationArea() {
   const [content, setContent] = useState<InspirationalContent[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchContent();
-    fetchPlaylists();
+    // Carregar conteúdo instantaneamente
+    setContent(getDefaultContent());
+    setPlaylists(getDefaultPlaylists());
     loadFavorites();
   }, []);
-
-  const fetchContent = async () => {
-    try {
-      setError(null);
-      const { data, error } = await supabase
-        .from('inspirational_content')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching content:', error);
-        // Se der erro, usar conteúdo padrão
-        setContent(getDefaultContent());
-        return;
-      }
-      
-      // Se não há dados, usar conteúdo padrão
-      if (!data || data.length === 0) {
-        setContent(getDefaultContent());
-      } else {
-        setContent(data);
-      }
-    } catch (error) {
-      console.error('Error fetching content:', error);
-      setContent(getDefaultContent());
-    }
-  };
 
   const getDefaultContent = (): InspirationalContent[] => {
     return [
@@ -118,13 +89,45 @@ export default function InspirationArea() {
         tags: ['sucesso', 'determinação'],
         is_active: true,
         created_at: new Date().toISOString()
+      },
+      {
+        id: '4',
+        type: 'article',
+        title: 'Empreendedorismo Moderno',
+        content: 'O empreendedorismo não é apenas sobre criar negócios, mas sobre resolver problemas reais das pessoas. Foque em agregar valor.',
+        author: 'Especialista em Negócios',
+        category: 'entrepreneurship',
+        tags: ['empreendedorismo', 'negócios', 'valor'],
+        is_active: true,
+        created_at: new Date().toISOString()
+      },
+      {
+        id: '5',
+        type: 'quote',
+        title: 'Concentração Total',
+        content: 'A concentração é a chave para a produtividade. Quando você foca em uma coisa de cada vez, os resultados são extraordinários.',
+        author: 'Especialista em Produtividade',
+        category: 'focus',
+        tags: ['foco', 'produtividade', 'concentração'],
+        is_active: true,
+        created_at: new Date().toISOString()
+      },
+      {
+        id: '6',
+        type: 'article',
+        title: 'Política e Cidadania',
+        content: 'A participação política é fundamental para uma democracia saudável. Informe-se, participe e faça sua voz ser ouvida.',
+        author: 'Especialista em Política',
+        category: 'politics',
+        tags: ['política', 'cidadania', 'democracia'],
+        is_active: true,
+        created_at: new Date().toISOString()
       }
     ];
   };
 
-  const fetchPlaylists = async () => {
-    // Simular playlists por enquanto
-    const mockPlaylists: Playlist[] = [
+  const getDefaultPlaylists = (): Playlist[] => {
+    return [
       {
         id: '1',
         title: 'Foco Total',
@@ -146,9 +149,30 @@ export default function InspirationArea() {
           { title: 'Workout Motivation', artist: 'Fitness Flow', duration: '4:10', platform: 'spotify' },
           { title: 'Stronger', artist: 'Motivation Mix', duration: '3:55', platform: 'spotify' }
         ]
+      },
+      {
+        id: '3',
+        title: 'Estudo Relaxante',
+        description: 'Músicas suaves para momentos de estudo',
+        category: 'study',
+        tracks: [
+          { title: 'Peaceful Study', artist: 'Calm Sounds', duration: '4:15', platform: 'spotify' },
+          { title: 'Academic Flow', artist: 'Study Music', duration: '3:50', platform: 'spotify' },
+          { title: 'Knowledge Quest', artist: 'Learning Beats', duration: '4:30', platform: 'spotify' }
+        ]
+      },
+      {
+        id: '4',
+        title: 'Relaxamento Total',
+        description: 'Para momentos de descanso e reflexão',
+        category: 'relaxation',
+        tracks: [
+          { title: 'Zen Garden', artist: 'Peaceful Mind', duration: '5:20', platform: 'spotify' },
+          { title: 'Inner Peace', artist: 'Meditation Music', duration: '4:45', platform: 'spotify' },
+          { title: 'Tranquil Waters', artist: 'Nature Sounds', duration: '6:10', platform: 'spotify' }
+        ]
       }
     ];
-    setPlaylists(mockPlaylists);
   };
 
   const loadFavorites = () => {
@@ -170,19 +194,27 @@ export default function InspirationArea() {
   const refreshContent = async () => {
     setRefreshing(true);
     try {
-      // Gerar novo conteúdo usando IA
-      const newQuote = await OpenAIService.generateQuote('motivation');
-      const newArticle = await OpenAIService.generateArticle('study');
+      // Simular atualização rápida
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Simular atualização do conteúdo
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Adicionar novo conteúdo
+      const newContent = [
+        {
+          id: Date.now().toString(),
+          type: 'quote' as const,
+          title: 'Nova Inspiração',
+          content: 'A vida é feita de pequenos momentos que, juntos, criam uma jornada extraordinária.',
+          author: 'Coach Digital',
+          category: 'motivation' as const,
+          tags: ['inspiração', 'vida'],
+          is_active: true,
+          created_at: new Date().toISOString()
+        }
+      ];
       
-      // Recarregar conteúdo
-      await fetchContent();
+      setContent(prev => [...newContent, ...prev.slice(0, 5)]);
     } catch (error) {
       console.error('Error refreshing content:', error);
-      // Se der erro na IA, pelo menos recarregar o conteúdo existente
-      await fetchContent();
     } finally {
       setRefreshing(false);
     }
@@ -234,28 +266,6 @@ export default function InspirationArea() {
     articles: content.filter(c => c.type === 'article').length,
     playlists: playlists.length
   };
-
-  // Garantir que o loading pare após um tempo máximo
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (loading) {
-        setLoading(false);
-        if (content.length === 0) {
-          setContent(getDefaultContent());
-        }
-      }
-    }, 5000); // 5 segundos máximo
-
-    return () => clearTimeout(timer);
-  }, [loading, content.length]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
