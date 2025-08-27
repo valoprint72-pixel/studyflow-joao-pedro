@@ -4,7 +4,7 @@
 
 ```bash
 # Substitua YOUR_USERNAME pelo seu usuário do GitHub
-git remote add origin https://github.com/YOUR_USERNAME/studyflow-joao-pedro.git
+git remote add origin https://github.com/valoprint72-pixel/studyflow-joao-pedro.git
 git branch -M main
 git push -u origin main
 ```
