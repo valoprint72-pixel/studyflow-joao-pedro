@@ -6,13 +6,14 @@ import FinanceManager from './components/FinanceManager';
 import AccountManager from './components/AccountManager';
 import SelfKnowledgeDashboard from './components/SelfKnowledgeDashboard';
 import PomodoroTimer from './components/PomodoroTimer';
+import AIFeedback from './components/AIFeedback';
 import Login from './components/Login';
 import InstallPrompt from './components/InstallPrompt';
 import { initializeNotifications } from './utils/notifications';
 import { User } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 
-type Page = 'dashboard' | 'studies' | 'finances' | 'accounts' | 'self-knowledge' | 'pomodoro';
+type Page = 'dashboard' | 'studies' | 'finances' | 'accounts' | 'self-knowledge' | 'pomodoro' | 'ai-feedback';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -85,6 +86,8 @@ function App() {
         return <SelfKnowledgeDashboard />;
       case 'pomodoro':
         return <PomodoroTimer />;
+      case 'ai-feedback':
+        return <AIFeedback />;
       default:
         return <Dashboard />;
     }
@@ -224,6 +227,20 @@ function App() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <span className="text-xs mt-1 font-medium">Timer</span>
+            </button>
+            
+            <button
+              onClick={() => setCurrentPage('ai-feedback')}
+              className={`flex flex-col items-center p-3 rounded-xl transition-all duration-300 ${
+                currentPage === 'ai-feedback' 
+                  ? 'bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-lg scale-105' 
+                  : 'text-gray-600 hover:text-indigo-600 hover:scale-105'
+              }`}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              <span className="text-xs mt-1 font-medium">IA</span>
             </button>
           </div>
         </nav>

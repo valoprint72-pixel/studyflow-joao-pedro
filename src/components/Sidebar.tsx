@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, BookOpen, Wallet, CreditCard, LogOut, User, Menu, X, Brain, Clock } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Wallet, CreditCard, LogOut, User, Menu, X, Brain, Clock, MessageSquare } from 'lucide-react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
-type Page = 'dashboard' | 'studies' | 'finances' | 'accounts' | 'self-knowledge' | 'pomodoro';
+type Page = 'dashboard' | 'studies' | 'finances' | 'accounts' | 'self-knowledge' | 'pomodoro' | 'ai-feedback';
 
 interface SidebarProps {
   currentPage: Page;
@@ -21,6 +21,7 @@ export default function Sidebar({ currentPage, setCurrentPage, user, onSignOut }
     { id: 'accounts' as Page, label: 'Contas', icon: CreditCard },
     { id: 'self-knowledge' as Page, label: 'Autoconhecimento', icon: Brain },
     { id: 'pomodoro' as Page, label: 'Pomodoro', icon: Clock },
+    { id: 'ai-feedback' as Page, label: 'Feedback IA', icon: MessageSquare },
   ];
 
   return (
